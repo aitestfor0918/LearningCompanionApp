@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Knowledge Coach AI</title>
+    <!-- Modern Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons for modern iconography -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background Animated Blobs for aesthetic vibe -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+    <div class="bg-shape shape-3"></div>
+
+    <div id="app">
+        <!-- SCREEN 1: HOME -->
+        <main id="homeScreen" class="screen glass-panel active">
+            <header class="app-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="ph-fill ph-brain icon-gradient"></i>
+                    <h2>知識教練 AI</h2>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="icon-btn" id="themeToggleBtn" title="切換深/淺色模式">
+                        <i class="ph-bold ph-sun"></i>
+                    </button>
+                    <button class="icon-btn" id="settingsBtn" title="API 設定">
+                        <i class="ph-bold ph-gear"></i>
+                    </button>
+                </div>
+            </header>
+            
+            <section class="current-learning">
+                <p class="subtitle">目前學習主題</p>
+                <div class="topic-card glass-panel interactive">
+                    <div class="topic-info">
+                        <div class="progress-badge">Day <span id="homeCurrentDay">2</span> / 5</div>
+                        <h3 id="homeCurrentTopic">尚未選擇主題</h3>
+                        <p class="topic-desc" id="homeTopicDesc">選擇一個主題開始你為期5天的學習旅程。</p>
+                    </div>
+                    <!-- Circular progress approximation -->
+                    <div class="progress-ring">
+                        <svg viewBox="0 0 36 36">
+                            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path class="circle" id="homeProgressCircle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <i class="ph-fill ph-book-open ring-icon"></i>
+                    </div>
+                </div>
+            </section>
+
+            <div class="home-actions">
+                <button id="continueBtn" class="btn btn-primary btn-large disabled">
+                    <i class="ph-bold ph-play"></i> 繼續學習
+                </button>
+                <button id="newTopicBtn" class="btn btn-secondary btn-large">
+                    <i class="ph-bold ph-plus-circle"></i> 選擇新主題
+                </button>
+            </div>
+        </main>
+
+        <!-- SCREEN 2: TOPIC SELECTION -->
+        <main id="topicScreen" class="screen glass-panel">
+            <header class="app-header">
+                <button class="icon-btn back-btn" data-target="homeScreen">
+                    <i class="ph-bold ph-arrow-left"></i>
+                </button>
+                <h2>選擇學習主題</h2>
+                <div style="width: 24px;"></div>
+            </header>
+
+            <div class="scroll-container">
+                <section class="topic-section" id="favoritesSection" style="display: none;">
+                    <h3 class="section-title" style="color: #ffd700;"><i class="ph-fill ph-star"></i> 我的最愛 (繼續學習)</h3>
+                    <div class="topic-grid highlight-grid" id="favoritesGrid">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
+
+                <section class="topic-section">
+                    <div class="section-header">
+                        <h3 class="section-title"><i class="ph-fill ph-lightbulb"></i> AI 推薦主題</h3>
+                        <button class="icon-btn refresh-btn" id="refreshRecBtn" title="刷新推薦主題">
+                            <i class="ph-bold ph-arrows-clockwise"></i>
+                        </button>
+                    </div>
+                    <div class="topic-grid" id="recommendedGrid">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
+
+                <section class="topic-section">
+                    <div class="section-header">
+                        <h3 class="section-title"><i class="ph-fill ph-music-notes"></i> 專屬主題 (職業導向)</h3>
+                        <button class="icon-btn refresh-btn" id="refreshExcBtn" title="刷新專屬主題">
+                            <i class="ph-bold ph-arrows-clockwise"></i>
+                        </button>
+                    </div>
+                    <div class="topic-grid highlight-grid" id="exclusiveGrid">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
+
+                <section class="topic-section">
+                    <h3 class="section-title"><i class="ph-fill ph-magic-wand"></i> 或自訂你想學的</h3>
+                    <div class="custom-topic-input">
+                        <input type="text" id="customTopicInput" placeholder="例如：量子生物學、黑洞、日本歷史..." class="glass-input">
+                        <button id="startCustomTopicBtn" class="btn btn-primary">開始</button>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- SCREEN 3: CHAT -->
+        <main id="chatScreen" class="screen glass-panel chat-layout">
+            <header class="app-header chat-header">
+                <button class="icon-btn back-btn" data-target="homeScreen">
+                    <i class="ph-bold ph-arrow-left"></i>
+                </button>
+                <div class="chat-title-group">
+                    <h2 id="chatTopicName">設計模式</h2>
+                    <select id="chatDaySelector" class="day-badge" style="appearance: auto; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: inherit; font-size: 0.9rem; border-radius: 12px; padding: 4px 12px; cursor: pointer; outline: none;">
+                        <option value="1">Day 1</option>
+                    </select>
+                </div>
+                <div class="header-actions" style="display: flex; gap: 8px;">
+                    <button class="icon-btn" id="favoriteBtn" title="加入最愛清單">
+                        <i class="ph-bold ph-star" id="favoriteIcon"></i>
+                    </button>
+                    <button class="icon-btn auto-tts-toggle" id="autoTtsBtn" title="開啟語音自動朗讀">
+                        <i class="ph-bold ph-speaker-slash"></i>
+                    </button>
+                    <button class="icon-btn" id="finishDayBtn" title="完成今日學習">
+                        <i class="ph-bold ph-check-circle"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="chat-container" id="chatContainer">
+                <!-- AI and User messages populate here -->
+            </div>
+
+            <div class="chat-input-area">
+                <button id="micBtn" class="icon-btn mic-btn" title="語音輸入">
+                    <i class="ph-bold ph-microphone"></i>
+                </button>
+                <input type="text" id="chatInput" placeholder="有什麼不懂的嗎？隨時發問..." class="glass-input">
+                <button id="sendBtn" class="btn btn-primary icon-only-btn">
+                    <i class="ph-bold ph-paper-plane-right"></i>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- API Settings Modal -->
+    <div id="settingsModal" class="modal-overlay hidden">
+        <div class="glass-panel modal-content settings-modal-content">
+            <header class="modal-header">
+                <h2><i class="ph-bold ph-gear"></i> API 設定</h2>
+                <button class="icon-btn close-modal" id="closeSettingsBtn">&times;</button>
+            </header>
+            <div class="modal-body">
+                <div class="settings-hint">
+                    <i class="ph-fill ph-info"></i>
+                    <div>
+                        <p>請填寫您的 API Key。</p>
+                        <small>自動識別 OpenAI 格式 (sk-...) 或 Google Gemini (AIza...)</small>
+                    </div>
+                </div>
+
+                <div class="form-group main-key-group" style="margin-bottom: 16px;">
+                    <label><i class="ph-bold ph-key"></i> API Key</label>
+                    <input type="password" id="apiKeyInput" class="glass-input highlight-input" placeholder="貼上您的 API Key...">
+                    <div style="text-align: right; margin-top: 6px;">
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-tertiary); font-size: 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                            <i class="ph-bold ph-arrow-square-out"></i> 點此取得免費 Google Gemini API
+                        </a>
+                    </div>
+                </div>
+
+                <details class="advanced-settings">
+                    <summary><i class="ph-bold ph-sliders"></i> 進階設定 (選填)</summary>
+                    <div class="advanced-settings-content">
+                        <div class="form-group">
+                            <label><i class="ph-bold ph-link"></i> Base URL</label>
+                            <input type="text" id="apiBaseUrlInput" class="glass-input" placeholder="預設: https://api.openai.com/v1">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="ph-bold ph-cpu"></i> 模型名稱</label>
+                            <input type="text" id="apiModelInput" class="glass-input" placeholder="預設: gpt-4o-mini">
+                        </div>
+                    </div>
+                </details>
+                
+                <button id="saveSettingsBtn" class="btn btn-primary save-btn">
+                    <i class="ph-bold ph-floppy-disk"></i> 儲存設定
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast glass-panel hidden">
+        <i class="ph-fill ph-info"></i>
+        <span id="toastMessage">通知訊息</span>
+    </div>
+
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
