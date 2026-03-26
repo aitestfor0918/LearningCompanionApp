@@ -36,28 +36,13 @@
             
             <section class="current-learning">
                 <p class="subtitle">目前學習主題</p>
-                <div class="topic-card glass-panel interactive">
-                    <div class="topic-info">
-                        <div class="progress-badge">Day <span id="homeCurrentDay">2</span> / 5</div>
-                        <h3 id="homeCurrentTopic">尚未選擇主題</h3>
-                        <p class="topic-desc" id="homeTopicDesc">選擇一個主題開始你為期5天的學習旅程。</p>
-                    </div>
-                    <!-- Circular progress approximation -->
-                    <div class="progress-ring">
-                        <svg viewBox="0 0 36 36">
-                            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            <path class="circle" id="homeProgressCircle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        </svg>
-                        <i class="ph-fill ph-book-open ring-icon"></i>
-                    </div>
+                <div id="activeTopicsContainer" class="active-topics-grid">
+                    <!-- Cards will be populated here by JS -->
                 </div>
             </section>
 
             <div class="home-actions">
-                <button id="continueBtn" class="btn btn-primary btn-large disabled">
-                    <i class="ph-bold ph-play"></i> 繼續學習
-                </button>
-                <button id="newTopicBtn" class="btn btn-secondary btn-large">
+                <button id="newTopicBtn" class="btn btn-primary btn-large">
                     <i class="ph-bold ph-plus-circle"></i> 選擇新主題
                 </button>
             </div>
@@ -182,19 +167,7 @@
                     </div>
                 </div>
 
-                <details class="advanced-settings">
-                    <summary><i class="ph-bold ph-sliders"></i> 進階設定 (選填)</summary>
-                    <div class="advanced-settings-content">
-                        <div class="form-group">
-                            <label><i class="ph-bold ph-link"></i> Base URL</label>
-                            <input type="text" id="apiBaseUrlInput" class="glass-input" placeholder="預設: https://api.openai.com/v1">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="ph-bold ph-cpu"></i> 模型名稱</label>
-                            <input type="text" id="apiModelInput" class="glass-input" placeholder="預設: gpt-4o-mini">
-                        </div>
-                    </div>
-                </details>
+
                 
                 <button id="saveSettingsBtn" class="btn btn-primary save-btn">
                     <i class="ph-bold ph-floppy-disk"></i> 儲存設定
@@ -211,6 +184,6 @@
 
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=1.9"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 // State Management
+// Version: 1.5
 const state = {
     currentScreen: 'homeScreen',
     topic: null,
@@ -27,7 +28,8 @@ const exclusiveTopics = [
     { title: "獨立音樂製作", icon: "ph-headphones" },
     { title: "寫歌靈感", icon: "ph-lightbulb" },
     { title: "編曲技巧", icon: "ph-piano-keys" },
-    { title: "混音基礎", icon: "ph-faders" }
+    { title: "混音基礎", icon: "ph-faders" },
+    { title: "隨興聊天", icon: "ph-chat-circle-dots" }
 ];
 
 const topicPools = {
@@ -51,24 +53,48 @@ const topicPools = {
         { title: "音樂行銷", icon: "ph-megaphone" },
         { title: "舞台表演藝術", icon: "ph-microphone-stage" },
         { title: "錄音室設計", icon: "ph-waveform" },
-        { title: "音樂版權管理", icon: "ph-copyright" }
+        { title: "音樂版權管理", icon: "ph-copyright" },
+        { title: "隨興聊天", icon: "ph-chat-circle-dots" }
     ]
 };
 
 // LLM API Logic
-function getSystemPrompt() {
-    return '你是一個知識教練。目前正在指導使用者學習「' + state.topic + '」。今天是 5 天學習計畫的第 ' + state.day + ' 天。\n\n' +
+function getSystemPrompt(isClosing = false) {
+    if (state.topic === '隨興聊天') {
+        let prompt = '你是一個親切的聊天夥伴。目前正在陪使用者進行「隨興聊天」。\n\n' +
+               '規則：\n' +
+               '1. 保持輕鬆、自然且溫暖的語氣，就像好朋友一樣。\n' +
+               '2. 這次沒有特定的 5 天學習計畫，隨意聊任何使用者感興趣的話題。\n';
+        
+        if (isClosing) {
+            prompt += '3. 使用者表示聊天可以結束了。請提供一個溫馨的結尾，並鼓勵他們隨時回來聊天。\n';
+        } else {
+            prompt += '3. 每次發言完，最後都要延續話題或是問一個有趣的小問題來維持互動。\n';
+        }
+        
+        prompt += '4. 全文請用繁體中文。請直接用 markdown 格式輸出，不要包含任何開場白。';
+        return prompt;
+    }
+
+    let prompt = '你是一個知識教練。目前正在指導使用者學習「' + state.topic + '」。今天是 5 天學習計畫的第 ' + state.day + ' 天。\n\n' +
            '規則：\n' +
            '1. 內容厚度必須依照天數變化：\n' +
            '   Day 1: 簡單介紹，建立初步直覺，使用超生活化的例子。\n' +
            '   Day 2: 進階機制與背後原理探討。\n' +
            '   Day 3: 專業應用與專業術語。\n' +
            '   Day 4: 極限案例、邊角狀況與深論。\n' +
-           '   Day 5: 知識統整與專家反思。\n' +
-           '2. 你每次發言完，最後一定要主動問「一個」引導問題。請使用 Markdown 標題或是粗體來標示這個問題。\n' +
-           '3. 語氣要像一個有經驗但平易近人的老師，簡單清楚，適度分段。\n' +
+           '   Day 5: 知識統整與專家反思。\n';
+    
+    if (isClosing) {
+        prompt += '2. 使用者表示今天的討論可以結束了。請提供一個簡短溫暖的總結，給予鼓勵，並提醒使用者可以點擊下方的「完成今日進度」按鈕。不要再提出引導問題。\n';
+    } else {
+        prompt += '2. 你每次發言完，最後一定要主動問「一個」引導問題。請使用 Markdown 標題或是粗體來標示這個問題。\n';
+    }
+    
+    prompt += '3. 語氣要像一個有經驗但平易近人的老師，簡單清楚，適度分段。\n' +
            '4. 如果使用者提問，請優先針對他的問題回答。回答完後，再將話題帶回今日主線，並重新問一個引導討論的問題。\n' +
            '5. 全文請用繁體中文。請直接用 markdown 格式輸出，不要包含任何開場白。';
+    return prompt;
 }
 
 async function callLLM(systemPrompt, userText = null) {
@@ -78,18 +104,38 @@ async function callLLM(systemPrompt, userText = null) {
     }
 
     const isGemini = apiSettings.apiKey.startsWith('AIza');
+    console.log('Detecting API type - isGemini:', isGemini, 'Key starts with:', apiSettings.apiKey.substring(0, 4));
 
     if (isGemini) {
         try {
-            const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiSettings.apiKey;
+            // Updated to Gemini 2.5 Flash (Latest 2026 standard)
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiSettings.apiKey}`;
             
-            const contents = state.chatHistory.map(msg => ({
-                role: msg.role === 'ai' ? 'model' : 'user',
-                parts: [{ text: msg.content }]
-            }));
+            // Native Gemini requires alternating roles (user/model)
+            let lastRole = null;
+            const cleanedContents = [];
             
+            const historyToProcess = [...state.chatHistory];
             if (userText) {
-                contents.push({ role: 'user', parts: [{ text: userText }] });
+                historyToProcess.push({ role: 'user', content: userText });
+            }
+
+            historyToProcess.forEach(msg => {
+                const role = msg.role === 'ai' ? 'model' : 'user';
+                if (role !== lastRole) {
+                    cleanedContents.push({
+                        role: role,
+                        parts: [{ text: msg.content || " " }]
+                    });
+                    lastRole = role;
+                } else {
+                    // Merge consecutive same-role messages
+                    cleanedContents[cleanedContents.length - 1].parts[0].text += "\n" + (msg.content || " ");
+                }
+            });
+
+            if (cleanedContents.length === 0) {
+                cleanedContents.push({ role: 'user', parts: [{ text: 'Hello' }] });
             }
             
             const response = await fetch(url, {
@@ -97,19 +143,32 @@ async function callLLM(systemPrompt, userText = null) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     system_instruction: { parts: [{ text: systemPrompt }] },
-                    contents: contents,
-                    generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
+                    contents: cleanedContents,
+                    generationConfig: { 
+                        temperature: 0.7, 
+                        maxOutputTokens: 2048
+                    }
                 })
             });
             
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error?.message || 'Gemini API 發生錯誤');
+                const rawText = await response.text();
+                let errMsg = response.statusText;
+                try {
+                    const err = JSON.parse(rawText);
+                    errMsg = err.error?.message || errMsg;
+                } catch(e) { errMsg = rawText || errMsg; }
+                throw new Error(`(HTTP ${response.status}) ${errMsg}`);
             }
             const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
+            if (data.candidates && data.candidates[0].content) {
+                return data.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Gemini 未能生成內容 (可能是安全過濾或空回應)');
+            }
         } catch (e) {
-            showToast('Gemini 錯誤: ' + e.message);
+            console.error('Gemini Fetch Error:', e);
+            addErrorToChat('Gemini 錯誤: ' + e.message);
             return null;
         }
     } else {
@@ -136,7 +195,7 @@ async function callLLM(systemPrompt, userText = null) {
                 body: JSON.stringify({
                     model: apiSettings.model,
                     messages: messages,
-                    max_tokens: 1000,
+                    max_tokens: 2048,
                     temperature: 0.7
                 })
             });
@@ -149,7 +208,8 @@ async function callLLM(systemPrompt, userText = null) {
             const data = await response.json();
             return data.choices[0].message.content;
         } catch (e) {
-            showToast('API 錯誤: ' + e.message);
+            console.error('OpenAI Fetch Error:', e);
+            addErrorToChat('OpenAI/API 錯誤: ' + e.message);
             return null;
         }
     }
@@ -157,11 +217,7 @@ async function callLLM(systemPrompt, userText = null) {
 
 // DOM Elements
 const screens = document.querySelectorAll('.screen');
-const homeCurrentDay = document.getElementById('homeCurrentDay');
-const homeCurrentTopic = document.getElementById('homeCurrentTopic');
-const homeTopicDesc = document.getElementById('homeTopicDesc');
-const homeProgressCircle = document.getElementById('homeProgressCircle');
-const continueBtn = document.getElementById('continueBtn');
+const activeTopicsContainer = document.getElementById('activeTopicsContainer');
 const newTopicBtn = document.getElementById('newTopicBtn');
 
 const recGrid = document.getElementById('recommendedGrid');
@@ -190,8 +246,6 @@ const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const apiKeyInput = document.getElementById('apiKeyInput');
-const apiBaseUrlInput = document.getElementById('apiBaseUrlInput');
-const apiModelInput = document.getElementById('apiModelInput');
 const themeToggleBtn = document.getElementById('themeToggleBtn');
 
 let currentTheme = localStorage.getItem('learning_companion_theme') || 'dark';
@@ -302,12 +356,6 @@ function setupEventListeners() {
         renderFavoritesGrid();
         showScreen('topicScreen');
     });
-    
-    continueBtn.addEventListener('click', () => {
-        if (state.topic) {
-            goToChat();
-        }
-    });
 
     // Topic Selection
     attachGridListeners();
@@ -382,15 +430,13 @@ function setupEventListeners() {
     // Settings
     settingsBtn.addEventListener('click', () => {
         apiKeyInput.value = apiSettings.apiKey;
-        apiBaseUrlInput.value = apiSettings.baseUrl;
-        apiModelInput.value = apiSettings.model;
         settingsModal.classList.remove('hidden');
     });
     closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
     saveSettingsBtn.addEventListener('click', () => {
         apiSettings.apiKey = apiKeyInput.value.trim();
-        apiSettings.baseUrl = apiBaseUrlInput.value.trim() || 'https://api.openai.com/v1';
-        apiSettings.model = apiModelInput.value.trim() || 'gpt-4o-mini';
+        apiSettings.baseUrl = 'https://api.openai.com/v1';
+        apiSettings.model = 'gpt-4o-mini';
         localStorage.setItem('learning_companion_api_settings', JSON.stringify(apiSettings));
         settingsModal.classList.add('hidden');
         showToast('API 設定已儲存');
@@ -493,6 +539,16 @@ function startTopic(topicName) {
         state.chatHistory = [];
         state.pastChats = {};
         state.hasFinishedToday = false;
+        
+        // Auto-add to active topics (favorites)
+        if (!state.favorites) state.favorites = [];
+        state.favorites.push({
+            topic: state.topic,
+            day: state.day,
+            chatHistory: [],
+            pastChats: {},
+            hasFinishedToday: false
+        });
     }
     saveState();
     updateHomeUI();
@@ -510,21 +566,42 @@ function updateFavoriteBtnUI() {
 }
 
 function updateHomeUI() {
-    if (state.topic) {
-        homeCurrentTopic.textContent = state.topic;
-        homeCurrentDay.textContent = state.day;
-        homeTopicDesc.textContent = `你的專屬知識教練已經準備好第 ${state.day} 天的課程內容了！`;
-        continueBtn.classList.remove('disabled');
-        
-        // Update progress circle (circumference is ~100)
-        const progress = (state.day / 5) * 100;
-        homeProgressCircle.setAttribute('stroke-dasharray', `${progress}, 100`);
+    if (!state.favorites) state.favorites = [];
+    
+    if (state.favorites.length > 0) {
+        activeTopicsContainer.innerHTML = state.favorites.map(f => {
+            const progress = (f.day / 5) * 100;
+            return `
+                <div class="active-topic-card glass-panel" data-topic="${f.topic}">
+                    <div class="topic-info">
+                        <div class="progress-badge">Day ${f.day} / 5</div>
+                        <h3>${f.topic}</h3>
+                        <p class="topic-desc">點擊繼續學習此主題...</p>
+                    </div>
+                    <div class="progress-ring">
+                        <svg viewBox="0 0 36 36">
+                            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path class="circle" style="stroke-dasharray: ${progress}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <i class="ph-fill ph-book-open ring-icon"></i>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add listeners to cards
+        activeTopicsContainer.querySelectorAll('.active-topic-card').forEach(card => {
+            card.addEventListener('click', () => startTopic(card.dataset.topic));
+        });
+
+        // (Card clicking handles topic switching)
     } else {
-        homeCurrentTopic.textContent = "尚未選擇主題";
-        homeCurrentDay.textContent = "-";
-        homeTopicDesc.textContent = "選擇一個主題開始你為期5天的學習旅程。";
-        continueBtn.classList.add('disabled');
-        homeProgressCircle.setAttribute('stroke-dasharray', `0, 100`);
+        activeTopicsContainer.innerHTML = `
+            <div class="empty-topics-hint">
+                <i class="ph-fill ph-chat-centered-dots"></i>
+                <p>目前還沒有正在學習中的主題。<br>點擊下方按鈕開始你的第一課吧！</p>
+            </div>
+        `;
     }
 }
 
@@ -587,22 +664,37 @@ async function handleUserMessage() {
         return;
     }
 
-    const replyText = await callLLM(getSystemPrompt(), null);
+    const closingPhrases = [/討論.*(可以結束|夠了|可以了)/, /可以(結束討論|停止了)/, /今天的討論(這樣子)?就可以了/];
+    const isClosing = closingPhrases.some(regex => regex.test(text));
+
+    const replyText = await callLLM(getSystemPrompt(isClosing), null);
     removeTypingIndicator();
 
     if (replyText) {
-        addMessageToChat('ai', replyText);
+        addMessageToChat('ai', replyText, isClosing);
     }
 }
 
-function addMessageToChat(role, rawContent) {
+function addErrorToChat(errMsg) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message msg-error';
+    wrapper.innerHTML = `
+        <div class="msg-bubble">
+            <div class="msg-content"><strong><i class="ph-bold ph-warning-circle"></i> API 錯誤發生</strong><br>${errMsg}</div>
+        </div>
+    `;
+    chatContainer.appendChild(wrapper);
+    scrollToBottom();
+}
+
+function addMessageToChat(role, rawContent, isClosing = false) {
     state.chatHistory.push({ role, content: rawContent });
     saveState();
     
-    appendMessageElement(role, rawContent, false);
+    appendMessageElement(role, rawContent, false, isClosing);
 }
 
-function appendMessageElement(role, rawContent, isHistory = false) {
+function appendMessageElement(role, rawContent, isHistory = false, isClosing = false) {
     const wrapper = document.createElement('div');
     wrapper.className = `message msg-${role}`;
     
@@ -639,6 +731,18 @@ function appendMessageElement(role, rawContent, isHistory = false) {
             setTimeout(() => {
                 speakText(plainText, playBtn);
             }, 300);
+        }
+
+        if (isClosing) {
+            const finishBtnWrapper = document.createElement('div');
+            finishBtnWrapper.style.marginTop = '16px';
+            finishBtnWrapper.innerHTML = `
+                <button class="btn btn-primary" style="width: 100%; padding: 12px; border-radius: 16px;">
+                    <i class="ph-bold ph-check-circle"></i> 完成今日進度
+                </button>
+            `;
+            finishBtnWrapper.querySelector('button').addEventListener('click', finishDay);
+            wrapper.querySelector('.msg-bubble').appendChild(finishBtnWrapper);
         }
     }
     
@@ -730,6 +834,13 @@ function scrollToBottom() {
 function finishDay() {
     if (state.day >= 5) {
         showToast(`恭喜！你已經完成了「${state.topic}」的5天旅程！`);
+        
+        // Remove from active topics (favorites)
+        if (state.favorites) {
+            const idx = state.favorites.findIndex(f => f.topic === state.topic);
+            if (idx >= 0) state.favorites.splice(idx, 1);
+        }
+
         setTimeout(() => {
             state.topic = null;
             state.day = 1;
