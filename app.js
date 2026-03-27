@@ -117,8 +117,8 @@ async function callLLM(systemPrompt, userText = null) {
 
     if (isGemini) {
         try {
-            // Using Gemini 1.5 Flash (Stable and fast)
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiSettings.apiKey}`;
+            // Using Gemini 2.5 Flash (Stable and fast for March 2026)
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiSettings.apiKey}`;
             
             // Native Gemini requires alternating roles (user/model)
             let lastRole = null;
