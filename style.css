@@ -44,6 +44,7 @@ body {
     padding: 0;
     width: 100%;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -99,6 +100,7 @@ body {
     width: 100%;
     max-width: 480px;
     height: 100%;
+    height: 100dvh;
     display: grid;
     grid-template-rows: 1fr auto;
     overflow: hidden;
@@ -1145,8 +1147,8 @@ button {
 .bottom-nav {
     grid-row: 2;
     width: calc(100% - 32px);
-    margin: 0 16px 20px 16px;
-    height: 64px;
+    margin: 0 16px calc(20px + env(safe-area-inset-bottom)) 16px;
+    height: 72px; /* Increased from 64px */
     display: flex;
     justify-content: space-around;
     align-items: center;
@@ -1165,11 +1167,11 @@ button {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 2px; /* Reduced from 4px */
     color: var(--text-secondary);
     cursor: pointer;
     transition: 0.2s;
-    padding: 8px;
+    padding: 4px 8px; /* Reduced padding from 8px 8px */
     border-radius: 20px;
     flex: 1;
 }
