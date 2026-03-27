@@ -75,21 +75,17 @@
 
                     <section class="topic-section">
                         <div class="section-header">
-                            <h3 class="section-title"><i class="ph-fill ph-music-notes"></i> 專屬主題</h3>
-                            <button class="icon-btn refresh-btn" id="refreshExcBtn" title="刷新專屬主題">
-                                <i class="ph-bold ph-arrows-clockwise"></i>
-                            </button>
+                            <h3 class="section-title"><i class="ph-fill ph-magic-wand"></i> 專屬主題</h3>
                         </div>
-                        <div class="topic-grid highlight-grid" id="exclusiveGrid">
-                            <!-- Populated by JS -->
+                        <p class="subtitle" style="margin-top: -10px; margin-bottom: 15px;">直接點選下方主題，或輸入大方向生成全新話題。</p>
+                        
+                        <div class="custom-topic-input" style="margin-bottom: 20px;">
+                            <input type="text" id="exclusiveThemeInput" placeholder="輸入大方向（如：商務英語）..." class="glass-input">
+                            <button id="generateExclusiveBtn" class="btn btn-primary" style="padding: 0 1.5rem; min-width: 80px;">生成</button>
                         </div>
-                    </section>
 
-                    <section class="topic-section">
-                        <h3 class="section-title"><i class="ph-fill ph-magic-wand"></i> 或自訂你想學的</h3>
-                        <div class="custom-topic-input">
-                            <input type="text" id="customTopicInput" placeholder="例如：面試英文..." class="glass-input">
-                            <button id="startCustomTopicBtn" class="btn btn-primary">開始</button>
+                        <div class="topic-grid" id="exclusiveGrid">
+                            <!-- Populated by JS -->
                         </div>
                     </section>
                 </div>
@@ -217,6 +213,6 @@
 
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js?v=1.9"></script>
+    <script src="app.js?v=2.0"></script>
 </body>
 </html>

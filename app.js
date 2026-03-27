@@ -231,10 +231,10 @@ const favoriteTopicsContainer = document.getElementById('favoriteTopicsContainer
 
 const recGrid = document.getElementById('recommendedGrid');
 const excGrid = document.getElementById('exclusiveGrid');
-const refreshRecBtn = document.getElementById('refreshRecBtn');
-const refreshExcBtn = document.getElementById('refreshExcBtn');
-const customTopicInput = document.getElementById('customTopicInput');
-const startCustomTopicBtn = document.getElementById('startCustomTopicBtn');
+const exclusiveThemeInput = document.getElementById('exclusiveThemeInput');
+const generateExclusiveBtn = document.getElementById('generateExclusiveBtn');
+const exclusiveResults = document.getElementById('exclusiveResults');
+const exclusiveResultsGrid = document.getElementById('exclusiveResultsGrid');
 
 const chatTopicName = document.getElementById('chatTopicName');
 const chatDaySelector = document.getElementById('chatDaySelector');
@@ -356,9 +356,9 @@ function setupEventListeners() {
 
     attachGridListeners();
 
-    startCustomTopicBtn.addEventListener('click', () => {
-        const val = customTopicInput.value.trim();
-        if (val) startTopic(val);
+    generateExclusiveBtn.addEventListener('click', generateExclusiveTopics);
+    exclusiveThemeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') generateExclusiveTopics();
     });
 
     // Chat
@@ -377,7 +377,6 @@ function setupEventListeners() {
 
     // Refresh Buttons
     refreshRecBtn.addEventListener('click', refreshRecommendedTopics);
-    refreshExcBtn.addEventListener('click', refreshExclusiveTopics);
 
     // Favorite Toggle
     favoriteBtn.addEventListener('click', () => {
@@ -392,7 +391,6 @@ function setupEventListeners() {
                 showToast('已移出最愛清單');
             }
         } else {
-            // This case shouldn't happen if topic is started, but for safety:
             state.favorites.push({
                 topic: state.topic,
                 day: state.day,
@@ -603,12 +601,63 @@ function updateFavoriteBtnUI() {
     }
 }
 
+async function generateExclusiveTopics() {
+    const theme = exclusiveThemeInput.value.trim();
+    if (!theme) {
+        showToast('請輸入一個大方向');
+        return;
+    }
+    
+    if (!apiSettings.apiKey) {
+        showToast('請先設定 API Key');
+        return;
+    }
+
+    generateExclusiveBtn.innerHTML = '<i class="ph-bold ph-circle-notch spinning"></i>';
+    generateExclusiveBtn.classList.add('disabled');
+    
+    try {
+        const prompt = `使用者目前想學習「${theme}」。請針對此方向生成 4 個專屬子話題。要求：
+1. 每個主題包含「title」(2-6個字)和一個對應的「icon」(從 Phosphor Icons 挑選)。
+2. 直接回傳 JSON 陣列：[{"title": "話題名", "icon": "ph-icon"}]。
+3. 不要任何額外解釋。`;
+
+        const response = await callLLM(prompt, `我想學習 ${theme}，請給我 4 個專屬话题。`);
+        if (response) {
+            const jsonStr = response.replace(/```json|```/g, '').trim();
+            const newTopics = JSON.parse(jsonStr);
+            if (Array.isArray(newTopics) && newTopics.length >= 4) {
+                // Merge/Replace the exclusiveTopics
+                exclusiveTopics.length = 0;
+                exclusiveTopics.push(...newTopics.slice(0, 4));
+                
+                renderTopicGrids();
+                attachGridListeners();
+                
+                state.exclusiveTopics = [...exclusiveTopics];
+                saveState();
+                
+                showToast(`已為您生成關於「${theme}」的專屬主題！`);
+                return;
+            }
+        }
+        throw new Error('AI 返回內容無法解析');
+    } catch (e) {
+        console.error("Failed to generate custom topics:", e);
+        showToast('生成專屬主題失敗，請檢查 API 設定');
+    } finally {
+        generateExclusiveBtn.innerHTML = '生成';
+        generateExclusiveBtn.classList.remove('disabled');
+    }
+}
+
 function updateHomeUI() {
     if (!state.favorites) state.favorites = [];
     
-    // 1. Render Active Topics (Learning Screen)
-    if (state.favorites.length > 0) {
-        activeTopicsContainer.innerHTML = state.favorites.map(f => renderTopicCard(f)).join('');
+    // 1. Render Active Topics (Learning Screen) - Only those NOT finished
+    const activeTopics = state.favorites.filter(f => !f.isFinishedCycle);
+    if (activeTopics.length > 0) {
+        activeTopicsContainer.innerHTML = activeTopics.map(f => renderTopicCard(f)).join('');
     } else {
         activeTopicsContainer.innerHTML = `
             <div class="empty-topics-hint">
@@ -618,7 +667,7 @@ function updateHomeUI() {
         `;
     }
 
-    // 2. Render Starred Topics (Favorites Screen)
+    // 2. Render Starred Topics (Favorites Screen) - Keep even if finished
     const starredTopics = state.favorites.filter(f => f.isStarred);
     if (starredTopics.length > 0) {
         favoriteTopicsContainer.innerHTML = starredTopics.map(f => renderTopicCard(f)).join('');
@@ -634,19 +683,22 @@ function updateHomeUI() {
 
 function renderTopicCard(f) {
     const progress = (f.day / 5) * 100;
+    const isDone = f.isFinishedCycle;
     return `
-        <div class="active-topic-card glass-panel" data-topic="${f.topic}">
+        <div class="active-topic-card glass-panel ${isDone ? 'finished-card' : ''}" data-topic="${f.topic}">
             <div class="topic-info">
-                <div class="progress-badge">Day ${f.day} / 5</div>
+                <div class="progress-badge" style="${isDone ? 'background: linear-gradient(135deg, #00f0ff, #8a2be2); color: white;' : ''}">
+                    ${isDone ? '<i class="ph-fill ph-check-circle"></i> 已光榮完成' : `Day ${f.day} / 5`}
+                </div>
                 <h3>${f.topic}</h3>
-                <p class="topic-desc">點擊繼續學習此主題...</p>
+                <p class="topic-desc">${isDone ? '查看過往學習精華或繼續複習' : '點擊繼續學習此主題...'}</p>
             </div>
             <div class="progress-ring">
                 <svg viewBox="0 0 36 36">
                     <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     <path class="circle" style="stroke-dasharray: ${progress}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                 </svg>
-                <i class="ph-fill ph-book-open ring-icon"></i>
+                <i class="ph-fill ${isDone ? 'ph-trophy' : 'ph-book-open'} ring-icon" style="${isDone ? 'color: #ffd700;' : ''}"></i>
             </div>
         </div>
     `;
@@ -825,13 +877,22 @@ function scrollToBottom() {
 }
 
 function finishDay() {
+    const favIdx = state.favorites ? state.favorites.findIndex(f => f.topic === state.topic) : -1;
+
     if (state.day >= 5) {
         showToast(`恭喜！你已經完成了「${state.topic}」的5天旅程！`);
         
-        // Remove from active topics (favorites)
-        if (state.favorites) {
-            const idx = state.favorites.findIndex(f => f.topic === state.topic);
-            if (idx >= 0) state.favorites.splice(idx, 1);
+        if (favIdx >= 0) {
+            const fav = state.favorites[favIdx];
+            if (fav.isStarred) {
+                // If starred, keep it but mark as finished
+                fav.isFinishedCycle = true;
+                fav.hasFinishedToday = true;
+                fav.day = 5;
+            } else {
+                // Not starred, remove it
+                state.favorites.splice(favIdx, 1);
+            }
         }
 
         setTimeout(() => {
@@ -845,12 +906,16 @@ function finishDay() {
         return;
     }
 
-    if (!state.pastChats) state.pastChats = {};
-    state.pastChats[state.day] = [...state.chatHistory];
-
     state.day += 1;
     state.chatHistory = []; // clear history for the next day
     state.hasFinishedToday = true;
+    
+    // Update the record in favorites
+    if (favIdx >= 0) {
+        state.favorites[favIdx].day = state.day;
+        state.favorites[favIdx].hasFinishedToday = true;
+    }
+
     saveState();
     
     showToast(`Day ${state.day-1} 完成！已推進到 Day ${state.day}`);
@@ -877,7 +942,9 @@ function saveState() {
     if (state.topic) {
         const favIdx = state.favorites.findIndex(f => f.topic === state.topic);
         if (favIdx >= 0) {
+            const oldFav = state.favorites[favIdx];
             state.favorites[favIdx] = {
+                ...oldFav, // Preserve isStarred and other existing properties
                 topic: state.topic,
                 day: state.day,
                 chatHistory: [...state.chatHistory],

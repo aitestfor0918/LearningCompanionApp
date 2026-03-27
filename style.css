@@ -255,12 +255,12 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px; /* Increased from 40px */
+    height: 44px; /* Increased from 40px */
     border-radius: 50%;
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
-    font-size: 1.2rem;
+    font-size: 1.4rem; /* Increased from 1.2rem */
 }
 
 .icon-btn:hover {
@@ -394,6 +394,10 @@ button {
     height: 60px;
 }
 
+.active-topic-card.finished-card {
+    border-color: var(--accent-tertiary);
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.05), rgba(138, 43, 226, 0.05));
+}
 .active-topic-card .ring-icon {
     font-size: 1.2rem;
 }
@@ -806,6 +810,11 @@ button {
     line-height: 1.4;
 }
 
+.icon-btn i, .settings-btn i, .theme-toggle-btn i {
+    font-size: 1.55rem;
+    display: block;
+}
+
 .main-key-group {
     margin-bottom: 24px;
 }
@@ -948,6 +957,56 @@ button {
     0% { box-shadow: 0 0 0 0 rgba(255, 0, 127, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(255, 0, 127, 0); }
     100% { box-shadow: 0 0 0 0 rgba(255, 0, 127, 0); }
+}
+
+.exclusive-results-container {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: none; /* Shown after generation */
+}
+
+.exclusive-results-container.active {
+    display: block;
+    animation: slideUp 0.4s ease-out;
+}
+
+.exclusive-results-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.sub-topic-card {
+    background: var(--card-bg);
+    padding: 1rem;
+    border-radius: 1rem;
+    border: 1px solid var(--border-color);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sub-topic-card:hover {
+    transform: translateY(-3px);
+    background: var(--card-bg-hover);
+    border-color: var(--accent-secondary);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.sub-topic-card i {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent-secondary);
+}
+
+.sub-topic-card span {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
 /* ===== TTS BUTTONS ===== */
