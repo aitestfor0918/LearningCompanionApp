@@ -1,20 +1,20 @@
 // State Management
 // Version: 1.5
 const state = {
-    currentScreen: 'homeScreen',
+    currentScreen: 'learningScreen', // Default to learning
     topic: null,
     day: 1,
     chatHistory: [],
     pastChats: {},
     isGenerating: false,
     hasFinishedToday: false,
-    favorites: [],
+    favorites: [], // Note: renamed internally to activeTopics in some contexts but kept as 'favorites' for LS compatibility
     recommendedTopics: [],
     exclusiveTopics: [],
     lastRefreshTime: 0
 };
 
-let apiSettings = JSON.parse(localStorage.getItem('learning_companion_api_settings') || '{"apiKey":"","baseUrl":"https://api.openai.com/v1","model":"gpt-4o-mini"}');
+let apiSettings = JSON.parse(localStorage.getItem('learning_companion_api_settings') || '{"apiKey":"","baseUrl":"","model":""}');
 
 // Data
 const recommendedTopics = [
@@ -43,7 +43,11 @@ const topicPools = {
         { title: "烹飪科學", icon: "ph-flask" },
         { title: "天文學入門", icon: "ph-planet" },
         { title: "演算法導論", icon: "ph-function" },
-        { title: "環境永續性", icon: "ph-leaf" }
+        { title: "環境永續性", icon: "ph-leaf" },
+        { title: "行為經濟學", icon: "ph-chart-line-up" },
+        { title: "中世紀歷史", icon: "ph-shield" },
+        { title: "現代藝術導賞", icon: "ph-palette" },
+        { title: "神經科學", icon: "ph-dna" }
     ],
     exclusive: [
         { title: "獨立音樂製作", icon: "ph-headphones" },
@@ -54,6 +58,7 @@ const topicPools = {
         { title: "舞台表演藝術", icon: "ph-microphone-stage" },
         { title: "錄音室設計", icon: "ph-waveform" },
         { title: "音樂版權管理", icon: "ph-copyright" },
+        { title: "爵士樂歷史", icon: "ph-trumpet" },
         { title: "隨興聊天", icon: "ph-chat-circle-dots" }
     ]
 };
@@ -86,7 +91,11 @@ function getSystemPrompt(isClosing = false) {
            '   Day 5: 知識統整與專家反思。\n';
     
     if (isClosing) {
-        prompt += '2. 使用者表示今天的討論可以結束了。請提供一個簡短溫暖的總結，給予鼓勵，並提醒使用者可以點擊下方的「完成今日進度」按鈕。不要再提出引導問題。\n';
+        prompt += '2. 使用者表示今天的討論可以結束了。請依照以下格式提供一個精簡的總結：\n' +
+               '   - **今日討論重點整理**：列出 2-3 個今天學到的核心觀念。\n' +
+               '   - **教練小提醒**：給予一句溫馨的鼓勵或總結。\n' +
+               '   - 最後提醒使用者可以點擊下方的「完成今日進度」按鈕。\n' +
+               '   - **絕對不要再提出任何引導問題**。\n';
     } else {
         prompt += '2. 你每次發言完，最後一定要主動問「一個」引導問題。請使用 Markdown 標題或是粗體來標示這個問題。\n';
     }
@@ -108,7 +117,7 @@ async function callLLM(systemPrompt, userText = null) {
 
     if (isGemini) {
         try {
-            // Updated to Gemini 2.5 Flash (Latest 2026 standard)
+            // Using Gemini 2.5 Flash (Standard stable model for March 2026)
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiSettings.apiKey}`;
             
             // Native Gemini requires alternating roles (user/model)
@@ -218,7 +227,7 @@ async function callLLM(systemPrompt, userText = null) {
 // DOM Elements
 const screens = document.querySelectorAll('.screen');
 const activeTopicsContainer = document.getElementById('activeTopicsContainer');
-const newTopicBtn = document.getElementById('newTopicBtn');
+const favoriteTopicsContainer = document.getElementById('favoriteTopicsContainer');
 
 const recGrid = document.getElementById('recommendedGrid');
 const excGrid = document.getElementById('exclusiveGrid');
@@ -233,12 +242,15 @@ const chatContainer = document.getElementById('chatContainer');
 const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
 const micBtn = document.getElementById('micBtn');
-const autoTtsBtn = document.getElementById('autoTtsBtn');
 const favoriteBtn = document.getElementById('favoriteBtn');
 const favoriteIcon = document.getElementById('favoriteIcon');
 const finishDayBtn = document.getElementById('finishDayBtn');
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
+
+// Bottom Nav
+const navItems = document.querySelectorAll('.nav-item');
+const bottomNav = document.querySelector('.bottom-nav');
 
 // Settings DOM
 const settingsBtn = document.getElementById('settingsBtn');
@@ -246,10 +258,7 @@ const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const apiKeyInput = document.getElementById('apiKeyInput');
-const themeToggleBtn = document.getElementById('themeToggleBtn');
-
 let currentTheme = localStorage.getItem('learning_companion_theme') || 'dark';
-let isAutoTtsEnabled = false;
 
 // Initialize
 function init() {
@@ -264,10 +273,14 @@ function init() {
 function applyTheme(theme) {
     if (theme === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
-        themeToggleBtn.innerHTML = '<i class="ph-bold ph-moon"></i>';
+        document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+            btn.innerHTML = '<i class="ph-bold ph-moon"></i>';
+        });
     } else {
         document.documentElement.removeAttribute('data-theme');
-        themeToggleBtn.innerHTML = '<i class="ph-bold ph-sun"></i>';
+        document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+            btn.innerHTML = '<i class="ph-bold ph-sun"></i>';
+        });
     }
 }
 
@@ -288,76 +301,59 @@ function renderTopicGrids() {
 }
 
 function renderFavoritesGrid() {
-    const favSection = document.getElementById('favoritesSection');
-    const favGrid = document.getElementById('favoritesGrid');
+    // This function is still used by updateHomeUI for the favoritesScreen
+    const favGrid = document.getElementById('favoriteTopicsContainer');
+    if (!favGrid) return;
     
-    if (!state.favorites || state.favorites.length === 0) {
-        favSection.style.display = 'none';
+    if (!state.favorites || state.favorites.filter(f => f.isStarred).length === 0) {
+        favGrid.innerHTML = `
+            <div class="empty-topics-hint">
+                <i class="ph-fill ph-star"></i>
+                <p>目前還沒有收藏的主題。<br>在聊天室中點擊星星圖示來收藏吧！</p>
+            </div>
+        `;
         return;
     }
     
-    favSection.style.display = 'block';
-    favGrid.innerHTML = state.favorites.map(f => 
-        `<div class="topic-item fav-item" data-topic="${f.topic}">
-            <div style="font-size: 0.8rem; color: #ffd700; margin-bottom: 4px;">Day ${f.day} / 5</div>
-            <i class="ph-fill ph-book-open" style="font-size: 1.5rem; margin-bottom: 8px; color: #ffd700;"></i><br>
-            ${f.topic}
-        </div>`
-    ).join('');
-    
-    document.querySelectorAll('.fav-item').forEach(item => {
-        item.addEventListener('click', (e) => startTopic(e.currentTarget.dataset.topic));
+    const starred = state.favorites.filter(f => f.isStarred);
+    favGrid.innerHTML = starred.map(f => renderTopicCard(f)).join('');
+
+    // Re-attach listeners to the new cards
+    favGrid.querySelectorAll('.active-topic-card').forEach(card => {
+        card.addEventListener('click', () => startTopic(card.dataset.topic));
     });
 }
 
 function setupEventListeners() {
-    // iOS Safari Keyboard Fix
-    const appEl = document.getElementById('app');
-    if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', () => {
-            if (appEl) {
-                appEl.style.height = window.visualViewport.height + 'px';
-                if (window.visualViewport.height < window.innerHeight * 0.75) {
-                    appEl.style.padding = '0px';
-                } else {
-                    appEl.style.padding = '16px';
-                }
-            }
-            window.scrollTo(0, 0);
-            setTimeout(scrollToBottom, 100);
-        });
-    }
-    
-    // Aggressively prevent body scrolling which displaces the fixed/absolute layout on iOS
-    window.addEventListener('scroll', () => {
-        window.scrollTo(0, 0);
+    // Basic navigation links
+    document.querySelectorAll('[data-target]').forEach(el => {
+        el.onclick = () => showScreen(el.dataset.target);
     });
-
-    // 確保只要手機虛擬鍵盤收合（input 失去焦點），就把整個畫面高度恢復
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('blur', () => {
-            if (appEl) {
-                appEl.style.height = '100%'; 
-                appEl.style.padding = '16px';
-            }
-            setTimeout(() => window.scrollTo(0, 0), 10);
-        });
-        input.addEventListener('focus', () => {
-            setTimeout(scrollToBottom, 300);
-        });
-    });
-
     // Navigation
     document.querySelectorAll('.back-btn').forEach(btn => {
         btn.addEventListener('click', (e) => showScreen(e.currentTarget.dataset.target));
     });
 
-    newTopicBtn.addEventListener('click', () => {
-        renderFavoritesGrid();
-        showScreen('topicScreen');
+    // Bottom Navigation
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const target = item.dataset.target;
+            showScreen(target);
+        });
     });
 
-    // Topic Selection
+    // Topic Selection (Delegation for robustness)
+    [activeTopicsContainer, favoriteTopicsContainer].forEach(container => {
+        if (container) {
+            container.onclick = (e) => {
+                const card = e.target.closest('.active-topic-card');
+                if (card && card.dataset.topic) {
+                    startTopic(card.dataset.topic);
+                }
+            };
+        }
+    });
+
     attachGridListeners();
 
     startCustomTopicBtn.addEventListener('click', () => {
@@ -383,54 +379,50 @@ function setupEventListeners() {
     refreshRecBtn.addEventListener('click', refreshRecommendedTopics);
     refreshExcBtn.addEventListener('click', refreshExclusiveTopics);
 
-    // Auto TTS Toggle
-    autoTtsBtn.addEventListener('click', () => {
-        isAutoTtsEnabled = !isAutoTtsEnabled;
-        if (isAutoTtsEnabled) {
-            autoTtsBtn.innerHTML = '<i class="ph-bold ph-speaker-high" style="color: var(--accent-tertiary);"></i>';
-            autoTtsBtn.title = "關閉語音自動朗讀";
-            showToast("已開啟自動朗讀");
-        } else {
-            autoTtsBtn.innerHTML = '<i class="ph-bold ph-speaker-slash"></i>';
-            autoTtsBtn.title = "開啟語音自動朗讀";
-            window.speechSynthesis.cancel();
-            showToast("已關閉自動朗讀");
-        }
-    });
-
     // Favorite Toggle
     favoriteBtn.addEventListener('click', () => {
         if (!state.topic) return;
         if (!state.favorites) state.favorites = [];
-        const idx = state.favorites.findIndex(f => f.topic === state.topic);
-        if (idx >= 0) {
-            state.favorites.splice(idx, 1);
-            showToast('已移出最愛清單');
+        const fav = state.favorites.find(f => f.topic === state.topic);
+        if (fav) {
+            fav.isStarred = !fav.isStarred;
+            if (fav.isStarred) {
+                showToast('⭐ 已加入最愛！');
+            } else {
+                showToast('已移出最愛清單');
+            }
         } else {
+            // This case shouldn't happen if topic is started, but for safety:
             state.favorites.push({
                 topic: state.topic,
                 day: state.day,
                 chatHistory: [...state.chatHistory],
                 pastChats: JSON.parse(JSON.stringify(state.pastChats || {})),
-                hasFinishedToday: state.hasFinishedToday
+                hasFinishedToday: state.hasFinishedToday,
+                isStarred: true
             });
-            showToast('⭐ 已加入最愛！可隨時在「選擇新主題」中繼續此話題');
+            showToast('⭐ 已加入最愛！');
         }
         updateFavoriteBtnUI();
         saveState();
+        updateHomeUI(); // Refresh both tabs
     });
 
     // Theme Toggle
-    themeToggleBtn.addEventListener('click', () => {
-        currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        applyTheme(currentTheme);
-        localStorage.setItem('learning_companion_theme', currentTheme);
+    document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            applyTheme(currentTheme);
+            localStorage.setItem('learning_companion_theme', currentTheme);
+        });
     });
 
     // Settings
-    settingsBtn.addEventListener('click', () => {
-        apiKeyInput.value = apiSettings.apiKey;
-        settingsModal.classList.remove('hidden');
+    document.querySelectorAll('.settings-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            apiKeyInput.value = apiSettings.apiKey;
+            settingsModal.classList.remove('hidden');
+        });
     });
     closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
     saveSettingsBtn.addEventListener('click', () => {
@@ -450,8 +442,14 @@ async function refreshRecommendedTopics(isAuto = false) {
     
     try {
         if (apiSettings.apiKey) {
-            const prompt = "請推薦4個適合學習的主題。要求：\n1. 每個主題包含「title」(2-6個字)和一個對應的「icon」(從 Phosphor Icons 挑選，例如 ph-atom, ph-code, ph-globe, ph-leaf, ph-planet 等)。\n2. 請直接回傳 JSON 陣列格式，例如：[{\"title\": \"主題名\", \"icon\": \"ph-icon\"}, ...]\n3. 不要任何額外解釋文字。";
-            const response = await callLLM(prompt, "給我4個隨機但有趣的主題");
+            const currentTitles = recommendedTopics.map(t => t.title).join('、');
+            const prompt = `請推薦4個「完全不同領域」且「適合學習」的新主題。要求：
+1. 領域要多元，例如涵蓋：藝術設計、前沿科學、日常生活技巧、哲學歷史、軟實力、旅遊文化等。
+2. 絕對不要推薦以下已經出現過的主題：${currentTitles}。
+3. 每個主題包含「title」(2-6個字)和一個對應的「icon」(從 Phosphor Icons 挑選，例如 ph-atom, ph-code, ph-globe, ph-leaf, ph-planet, ph-camera, ph-music-notes 等)。
+4. 請直接回傳 JSON 陣列格式，例如：[{"title": "主題名", "icon": "ph-icon"}]
+5. 不要任何額外解釋文字。`;
+            const response = await callLLM(prompt, "請給我4個跟之前完全不同的、有趣的多元學習主題。");
             if (response) {
                 try {
                     const jsonStr = response.replace(/```json|```/g, '').trim();
@@ -507,24 +505,61 @@ function refreshExclusiveTopics(isAuto = false) {
 }
 
 function attachGridListeners() {
-    document.querySelectorAll('.topic-item').forEach(item => {
-        // Remove existing if any (though innerHTML clear usually handles this)
-        item.addEventListener('click', (e) => startTopic(e.currentTarget.dataset.topic));
+    // We already use delegation in some places, but let's ensure these containers work
+    const containers = [recGrid, excGrid];
+    containers.forEach(container => {
+        if (!container) return;
+        // Use delegation for better reliability
+        container.onclick = (e) => {
+            const card = e.target.closest('.topic-item');
+            if (card && card.dataset.topic) {
+                console.log('Starting topic:', card.dataset.topic);
+                startTopic(card.dataset.topic);
+            }
+        };
     });
 }
 
 function showScreen(screenId) {
-    // 強制將瀏覽器視窗滾動回頂部，防止 iOS 鍵盤收起後畫面卡在半空中的 Bug
     window.scrollTo(0, 0);
 
     screens.forEach(s => s.classList.remove('active'));
     document.getElementById(screenId).classList.add('active');
     state.currentScreen = screenId;
+
+    // Update Bottom Nav Active State
+    navItems.forEach(item => {
+        if (item.dataset.target === screenId) {
+            item.classList.add('active');
+            const icon = item.querySelector('i');
+            if (icon) icon.className = icon.className.replace('ph-bold', 'ph-fill');
+        } else {
+            item.classList.remove('active');
+            const icon = item.querySelector('i');
+            if (icon) icon.className = icon.className.replace('ph-fill', 'ph-bold');
+        }
+    });
+
+    // Hide Bottom Nav in Chat Screen
+    if (screenId === 'chatScreen') {
+        bottomNav.style.display = 'none';
+    } else {
+        bottomNav.style.display = 'flex';
+    }
+
+    // Special Rendering for specific screens
+    if (screenId === 'learningScreen' || screenId === 'favoritesScreen') {
+        updateHomeUI();
+    }
+    if (screenId === 'exploreScreen') {
+        renderTopicGrids();
+    }
+
     saveState();
 }
 
 function startTopic(topicName) {
-    // If it's a favorite, load from favorite
+    // If it's a favorite/active, load from state
     const fav = state.favorites ? state.favorites.find(f => f.topic === topicName) : null;
     if (fav) {
         state.topic = fav.topic;
@@ -540,14 +575,15 @@ function startTopic(topicName) {
         state.pastChats = {};
         state.hasFinishedToday = false;
         
-        // Auto-add to active topics (favorites)
+        // Auto-add to active topics
         if (!state.favorites) state.favorites = [];
         state.favorites.push({
             topic: state.topic,
             day: state.day,
             chatHistory: [],
             pastChats: {},
-            hasFinishedToday: false
+            hasFinishedToday: false,
+            isStarred: false
         });
     }
     saveState();
@@ -557,52 +593,63 @@ function startTopic(topicName) {
 
 function updateFavoriteBtnUI() {
     if (!state.topic || !state.favorites) return;
-    const isFav = state.favorites.some(f => f.topic === state.topic);
-    if (isFav) {
+    const fav = state.favorites.find(f => f.topic === state.topic);
+    if (fav && fav.isStarred) {
         favoriteIcon.className = 'ph-fill ph-star favorite-active';
+        favoriteIcon.style.color = '#ffd700';
     } else {
         favoriteIcon.className = 'ph-bold ph-star';
+        favoriteIcon.style.color = '';
     }
 }
 
 function updateHomeUI() {
     if (!state.favorites) state.favorites = [];
     
+    // 1. Render Active Topics (Learning Screen)
     if (state.favorites.length > 0) {
-        activeTopicsContainer.innerHTML = state.favorites.map(f => {
-            const progress = (f.day / 5) * 100;
-            return `
-                <div class="active-topic-card glass-panel" data-topic="${f.topic}">
-                    <div class="topic-info">
-                        <div class="progress-badge">Day ${f.day} / 5</div>
-                        <h3>${f.topic}</h3>
-                        <p class="topic-desc">點擊繼續學習此主題...</p>
-                    </div>
-                    <div class="progress-ring">
-                        <svg viewBox="0 0 36 36">
-                            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            <path class="circle" style="stroke-dasharray: ${progress}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        </svg>
-                        <i class="ph-fill ph-book-open ring-icon"></i>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        // Add listeners to cards
-        activeTopicsContainer.querySelectorAll('.active-topic-card').forEach(card => {
-            card.addEventListener('click', () => startTopic(card.dataset.topic));
-        });
-
-        // (Card clicking handles topic switching)
+        activeTopicsContainer.innerHTML = state.favorites.map(f => renderTopicCard(f)).join('');
     } else {
         activeTopicsContainer.innerHTML = `
             <div class="empty-topics-hint">
                 <i class="ph-fill ph-chat-centered-dots"></i>
-                <p>目前還沒有正在學習中的主題。<br>點擊下方按鈕開始你的第一課吧！</p>
+                <p>目前還沒有正在學習中的主題。<br>到「探索」分頁開始你的第一課吧！</p>
             </div>
         `;
     }
+
+    // 2. Render Starred Topics (Favorites Screen)
+    const starredTopics = state.favorites.filter(f => f.isStarred);
+    if (starredTopics.length > 0) {
+        favoriteTopicsContainer.innerHTML = starredTopics.map(f => renderTopicCard(f)).join('');
+    } else {
+        favoriteTopicsContainer.innerHTML = `
+            <div class="empty-topics-hint">
+                <i class="ph-fill ph-star"></i>
+                <p>目前還沒有收藏的主題。<br>在聊天室中點擊星星圖示來收藏吧！</p>
+            </div>
+        `;
+    }
+}
+
+function renderTopicCard(f) {
+    const progress = (f.day / 5) * 100;
+    return `
+        <div class="active-topic-card glass-panel" data-topic="${f.topic}">
+            <div class="topic-info">
+                <div class="progress-badge">Day ${f.day} / 5</div>
+                <h3>${f.topic}</h3>
+                <p class="topic-desc">點擊繼續學習此主題...</p>
+            </div>
+            <div class="progress-ring">
+                <svg viewBox="0 0 36 36">
+                    <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path class="circle" style="stroke-dasharray: ${progress}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                </svg>
+                <i class="ph-fill ph-book-open ring-icon"></i>
+            </div>
+        </div>
+    `;
 }
 
 function goToChat() {
@@ -664,10 +711,16 @@ async function handleUserMessage() {
         return;
     }
 
-    const closingPhrases = [/討論.*(可以結束|夠了|可以了)/, /可以(結束討論|停止了)/, /今天的討論(這樣子)?就可以了/];
-    const isClosing = closingPhrases.some(regex => regex.test(text));
+    // Comprehensive natural language ending detection
+    const endingKeywords = [
+        '可以了', '夠了', '結束', '到這裡', '不說了', '就這樣', 
+        '不聊了', '差不多了', '沒問題了', '不需要了', 
+        '我們今天這樣就可以了', '話題已經夠了', '到此為止',
+        'bye', 'goodbye', 'enough', 'stop', 'finished'
+    ];
+    const isClosing = endingKeywords.some(keyword => text.toLowerCase().includes(keyword));
 
-    const replyText = await callLLM(getSystemPrompt(isClosing), null);
+    const replyText = await callLLM(getSystemPrompt(isClosing), text);
     removeTypingIndicator();
 
     if (replyText) {
@@ -713,25 +766,18 @@ function appendMessageElement(role, rawContent, isHistory = false, isClosing = f
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'msg-actions';
         
-        const playBtn = document.createElement('button');
-        playBtn.className = 'icon-btn tts-btn';
-        playBtn.title = '朗讀此訊息';
-        playBtn.innerHTML = '<i class="ph-bold ph-speaker-high"></i>';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'icon-btn copy-btn';
+        copyBtn.title = '複製此訊息';
+        copyBtn.innerHTML = '<i class="ph-bold ph-copy"></i>';
         
-        const plainText = rawContent.replace(/[#*`_~>]/g, '');
-
-        playBtn.addEventListener('click', () => {
-            speakText(plainText, playBtn);
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(rawContent);
+            showToast('已複製到剪貼簿');
         });
 
-        actionsDiv.appendChild(playBtn);
+        actionsDiv.appendChild(copyBtn);
         wrapper.querySelector('.msg-bubble').appendChild(actionsDiv);
-
-        if (isAutoTtsEnabled && !isHistory) {
-            setTimeout(() => {
-                speakText(plainText, playBtn);
-            }, 300);
-        }
 
         if (isClosing) {
             const finishBtnWrapper = document.createElement('div');
@@ -750,59 +796,6 @@ function appendMessageElement(role, rawContent, isHistory = false, isClosing = f
     scrollToBottom();
 }
 
-let currentUtterance = null;
-function speakText(text, btnElement) {
-    if (!('speechSynthesis' in window)) {
-        showToast('您的瀏覽器不支援語音朗讀功能');
-        return;
-    }
-
-    if (window.speechSynthesis.speaking && currentUtterance && currentUtterance.text === text) {
-        window.speechSynthesis.cancel();
-        return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-TW';
-    utterance.rate = 1.2; // 加塊語速
-    utterance.pitch = 1.1; // 稍微提高一點音調，聽起來更輕柔
-    
-    // 尋找內建的中文溫柔女聲 (macOS/iOS 常見為 Ting-Ting, Mei-Jia ; Chrome 為 Google 國語)
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) {
-        let preferredVoice = voices.find(v => {
-            const n = v.name.toLowerCase();
-            return v.lang.includes('zh-TW') && (n.includes('ting') || n.includes('mei') || n.includes('qiao') || n.includes('xiaoxiao') || n.includes('google'));
-        });
-        if (!preferredVoice) preferredVoice = voices.find(v => v.lang.includes('zh-TW'));
-        if (preferredVoice) utterance.voice = preferredVoice;
-    }
-    
-    const iconBase = '<i class="ph-bold ph-speaker-high"></i>';
-    const iconPlaying = '<i class="ph-fill ph-speaker-high pulse-icon"></i>';
-    
-    utterance.onstart = () => {
-        btnElement.innerHTML = iconPlaying;
-        btnElement.classList.add('playing');
-    };
-    
-    utterance.onend = () => {
-        btnElement.innerHTML = iconBase;
-        btnElement.classList.remove('playing');
-        currentUtterance = null;
-    };
-
-    utterance.onerror = () => {
-        btnElement.innerHTML = iconBase;
-        btnElement.classList.remove('playing');
-        currentUtterance = null;
-    };
-
-    currentUtterance = utterance;
-    window.speechSynthesis.speak(utterance);
-}
 
 function showTypingIndicator() {
     state.isGenerating = true;
@@ -847,7 +840,7 @@ function finishDay() {
             state.chatHistory = [];
             saveState();
             updateHomeUI();
-            showScreen('homeScreen');
+            showScreen('learningScreen');
         }, 3000);
         return;
     }
@@ -862,7 +855,7 @@ function finishDay() {
     
     showToast(`Day ${state.day-1} 完成！已推進到 Day ${state.day}`);
     updateHomeUI();
-    showScreen('homeScreen');
+    showScreen('learningScreen');
 }
 
 function showToast(msg) {
@@ -902,7 +895,12 @@ function loadState() {
     if (saved) {
         const parsed = JSON.parse(saved);
         Object.assign(state, parsed);
-        if (!state.favorites) state.favorites = [];
+        // Migration: Ensure all favorites have isStarred property
+        if (state.favorites) {
+            state.favorites.forEach(f => {
+                if (f.isStarred === undefined) f.isStarred = false;
+            });
+        }
         
         // Sync global arrays with state
         if (state.recommendedTopics && state.recommendedTopics.length > 0) {
