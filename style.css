@@ -624,6 +624,31 @@ button {
 .msg-bubble p:last-child {
     margin-bottom: 0px;
 }
+.msg-bubble h1, 
+.msg-bubble h2, 
+.msg-bubble h3 {
+    margin-top: 12px;
+    margin-bottom: 8px;
+    line-height: 1.3;
+    font-weight: 700;
+}
+
+.msg-bubble h1 {
+    font-size: 1.4rem;
+    color: var(--accent-tertiary);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.msg-bubble h2 {
+    font-size: 1.2rem;
+    color: var(--accent-secondary);
+}
+
+.msg-bubble h3 {
+    font-size: 1.1rem;
+    color: var(--accent-primary);
+}
+
 .msg-bubble strong {
     color: var(--accent-tertiary);
 }
