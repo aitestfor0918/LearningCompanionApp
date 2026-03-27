@@ -117,14 +117,14 @@ async function callLLM(systemPrompt, userText = null) {
 
     if (isGemini) {
         try {
-            // Using Gemini 2.5 Flash (Standard stable model for March 2026)
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiSettings.apiKey}`;
+            // Using Gemini 1.5 Flash (Stable and fast)
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiSettings.apiKey}`;
             
             // Native Gemini requires alternating roles (user/model)
             let lastRole = null;
             const cleanedContents = [];
             
-            const historyToProcess = [...state.chatHistory];
+            const historyToProcess = state.chatHistory.slice(-20); // Cap history to last 20 messages for speed
             if (userText) {
                 historyToProcess.push({ role: 'user', content: userText });
             }
@@ -292,12 +292,24 @@ function renderTopicGrids() {
         </div>`
     ).join('');
 
-    excGrid.innerHTML = exclusiveTopics.map(t => 
+    // Render Exclusive Topics (from dynamic list + permanent Casual Chat)
+    let excHTML = exclusiveTopics.map(t => 
         `<div class="topic-item" data-topic="${t.title}">
             <i class="ph-fill ${t.icon}" style="font-size: 1.5rem; margin-bottom: 8px; color: var(--accent-secondary);"></i><br>
             ${t.title}
         </div>`
     ).join('');
+    
+    // Always add "Casual Chat" if it's not already in the list
+    if (!exclusiveTopics.find(t => t.title === '隨興聊天')) {
+        excHTML += `
+            <div class="topic-item permanent-topic" data-topic="隨興聊天">
+                <i class="ph-fill ph-chat-circle-dots" style="font-size: 1.5rem; margin-bottom: 8px; color: var(--accent-secondary);"></i><br>
+                隨興聊天
+            </div>
+        `;
+    }
+    excGrid.innerHTML = excHTML;
 }
 
 function renderFavoritesGrid() {
