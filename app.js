@@ -118,8 +118,8 @@ async function callLLM(systemPrompt, userText = null) {
 
     if (isGemini) {
         try {
-            // Using Gemini Flash Latest on v1beta for model stability and instruction support
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiSettings.apiKey}`;
+            // Using Gemini 1.5 Flash for better stability and lower latency
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiSettings.apiKey}`;
             
             // Native Gemini requires alternating roles (user/model)
             let lastRole = null;
@@ -148,32 +148,46 @@ async function callLLM(systemPrompt, userText = null) {
                 cleanedContents.push({ role: 'user', parts: [{ text: 'Hello' }] });
             }
             
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    system_instruction: { parts: [{ text: systemPrompt }] },
-                    contents: cleanedContents,
-                    generationConfig: { 
-                        temperature: 0.5, 
-                        maxOutputTokens: 1024
+            // Implementation with simple retry for transient errors (503/500)
+            const fetchWithRetry = async (retries = 3, delay = 1000) => {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        system_instruction: { parts: [{ text: systemPrompt }] },
+                        contents: cleanedContents,
+                        generationConfig: { 
+                            temperature: 0.5, 
+                            maxOutputTokens: 1024
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    const status = response.status;
+                    if ((status === 503 || status === 500) && retries > 0) {
+                        console.warn(`Gemini API Busy (${status}), retrying in ${delay}ms... (${retries} retries left)`);
+                        showToast(`系統忙碌中，正在嘗試重新連線...`);
+                        await new Promise(res => setTimeout(res, delay));
+                        return fetchWithRetry(retries - 1, delay * 2);
                     }
-                })
-            });
-            
-            if (!response.ok) {
-                const rawText = await response.text();
-                let errMsg = response.statusText;
-                if (response.status === 429) {
-                    showToast('流量已達上限！請稍候 1 分鐘再試。');
-                    throw new Error('(HTTP 429) 目前請求過於頻繁，請等待約 1 分鐘再重新整理或開啟聊天。');
+                    
+                    const rawText = await response.text();
+                    let errMsg = response.statusText;
+                    if (status === 429) {
+                        showToast('流量已達上限！請稍候 1 分鐘再試。');
+                        throw new Error('(HTTP 429) 目前請求過於頻繁，請等待約 1 分鐘再重新整理或開啟聊天。');
+                    }
+                    try {
+                        const err = JSON.parse(rawText);
+                        errMsg = err.error?.message || errMsg;
+                    } catch(e) { errMsg = rawText || errMsg; }
+                    throw new Error(`(HTTP ${status}) ${errMsg}`);
                 }
-                try {
-                    const err = JSON.parse(rawText);
-                    errMsg = err.error?.message || errMsg;
-                } catch(e) { errMsg = rawText || errMsg; }
-                throw new Error(`(HTTP ${response.status}) ${errMsg}`);
-            }
+                return response;
+            };
+
+            const response = await fetchWithRetry();
             const data = await response.json();
             if (data.candidates && data.candidates[0].content) {
                 return data.candidates[0].content.parts[0].text;
