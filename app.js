@@ -101,8 +101,9 @@ function getSystemPrompt(isClosing = false) {
     }
     
     prompt += '3. 語氣要像一個有經驗但平易近人的老師，簡單清楚，適度分段。\n' +
-           '4. 如果使用者提問，請優先針對他的問題回答。回答完後，再將話題帶回今日主線，並重新問一個引導討論的問題。\n' +
-           '5. 全文請用繁體中文。請直接用 markdown 格式輸出，不要包含任何開場白。';
+           '4. 每次回覆請保持精練，控制在 「2-3 句」核心重點，確保解釋完整' + (isClosing ? '。' : '並包含引導問題。') + '\n' +
+           '5. 如果使用者提問，請優先針對他的問題回答。回答完後，再將話題帶回今日主線，並重新問一個引導討論的問題。\n' +
+           '6. 全文請用繁體中文。請直接用 markdown 格式輸出，不要包含任何開場白。';
     return prompt;
 }
 
@@ -117,14 +118,14 @@ async function callLLM(systemPrompt, userText = null) {
 
     if (isGemini) {
         try {
-            // Using Gemini 2.5 Flash (Stable and fast for March 2026)
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiSettings.apiKey}`;
+            // Using Gemini Flash Latest on v1beta for model stability and instruction support
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiSettings.apiKey}`;
             
             // Native Gemini requires alternating roles (user/model)
             let lastRole = null;
             const cleanedContents = [];
             
-            const historyToProcess = state.chatHistory.slice(-20); // Cap history to last 20 messages for speed
+            const historyToProcess = state.chatHistory.slice(-10); // Reduce history to last 10 for maximum speed
             if (userText) {
                 historyToProcess.push({ role: 'user', content: userText });
             }
@@ -154,8 +155,8 @@ async function callLLM(systemPrompt, userText = null) {
                     system_instruction: { parts: [{ text: systemPrompt }] },
                     contents: cleanedContents,
                     generationConfig: { 
-                        temperature: 0.7, 
-                        maxOutputTokens: 2048
+                        temperature: 0.5, 
+                        maxOutputTokens: 1024
                     }
                 })
             });
@@ -163,6 +164,10 @@ async function callLLM(systemPrompt, userText = null) {
             if (!response.ok) {
                 const rawText = await response.text();
                 let errMsg = response.statusText;
+                if (response.status === 429) {
+                    showToast('流量已達上限！請稍候 1 分鐘再試。');
+                    throw new Error('(HTTP 429) 目前請求過於頻繁，請等待約 1 分鐘再重新整理或開啟聊天。');
+                }
                 try {
                     const err = JSON.parse(rawText);
                     errMsg = err.error?.message || errMsg;
@@ -778,9 +783,9 @@ async function handleUserMessage() {
     // Comprehensive natural language ending detection
     const endingKeywords = [
         '可以了', '夠了', '結束', '到這裡', '不說了', '就這樣', 
-        '不聊了', '差不多了', '沒問題了', '不需要了', 
+        '不聊了', '差不多了', '沒問題了', '不需要了', '完成', '謝謝', '感恩',
         '我們今天這樣就可以了', '話題已經夠了', '到此為止',
-        'bye', 'goodbye', 'enough', 'stop', 'finished'
+        'bye', 'goodbye', 'enough', 'stop', 'finished', 'thanks'
     ];
     const isClosing = endingKeywords.some(keyword => text.toLowerCase().includes(keyword));
 
@@ -894,8 +899,13 @@ function finishDay() {
     if (state.day >= 5) {
         showToast(`恭喜！你已經完成了「${state.topic}」的5天旅程！`);
         
+        // Final archive
+        if (!state.pastChats) state.pastChats = {};
+        state.pastChats[state.day] = [...state.chatHistory];
+        
         if (favIdx >= 0) {
             const fav = state.favorites[favIdx];
+            fav.pastChats = JSON.parse(JSON.stringify(state.pastChats));
             if (fav.isStarred) {
                 // If starred, keep it but mark as finished
                 fav.isFinishedCycle = true;
@@ -918,6 +928,10 @@ function finishDay() {
         return;
     }
 
+    // Archive today's chat before moving to next day
+    if (!state.pastChats) state.pastChats = {};
+    state.pastChats[state.day] = [...state.chatHistory];
+
     state.day += 1;
     state.chatHistory = []; // clear history for the next day
     state.hasFinishedToday = true;
@@ -926,6 +940,7 @@ function finishDay() {
     if (favIdx >= 0) {
         state.favorites[favIdx].day = state.day;
         state.favorites[favIdx].hasFinishedToday = true;
+        state.favorites[favIdx].pastChats = JSON.parse(JSON.stringify(state.pastChats));
     }
 
     saveState();
@@ -994,23 +1009,31 @@ function loadState() {
 }
 
 async function checkDailyRefresh() {
-    const now = new Date();
-    // 取得當前時間點的「最近一個清晨 6 點」
-    // 如果現在不到 6 點，則最近一個 6 點是昨天的 6 點
-    const recent6AM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6, 0, 0);
-    if (now < recent6AM) {
-        recent6AM.setDate(recent6AM.getDate() - 1);
-    }
-    
-    const recent6AMTs = recent6AM.getTime();
-    
-    // 如果最後更新時間早於最近的 6 點，則觸發更新
-    if (state.lastRefreshTime < recent6AMTs) {
-        console.log("Daily refresh triggered (Last update before 6 AM)");
-        await refreshRecommendedTopics(true); // pass 'true' to indicate auto-refresh
-        refreshExclusiveTopics(true);
-        state.lastRefreshTime = Date.now();
-        saveState();
+    try {
+        const now = new Date();
+        const recent6AM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6, 0, 0);
+        if (now < recent6AM) {
+            recent6AM.setDate(recent6AM.getDate() - 1);
+        }
+        
+        const recent6AMTs = recent6AM.getTime();
+        
+        if (state.lastRefreshTime < recent6AMTs) {
+            console.log("Daily refresh triggered (Local only to save quota)");
+            state.lastRefreshTime = Date.now();
+            saveState();
+            
+            // NO AI CALL HERE - Local shuffle only to preserve quota for chat
+            const shuffled = [...topicPools.recommended].sort(() => 0.5 - Math.random());
+            recommendedTopics.length = 0;
+            recommendedTopics.push(...shuffled.slice(0, 4));
+            
+            refreshExclusiveTopics(true);
+            renderTopicGrids();
+            attachGridListeners();
+        }
+    } catch (err) {
+        console.error("Silent Daily Refresh Error:", err);
     }
 }
 
