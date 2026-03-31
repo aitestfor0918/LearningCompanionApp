@@ -471,10 +471,13 @@ async function refreshRecommendedTopics(isAuto = false) {
     
     try {
         if (apiSettings.apiKey) {
-            const currentTitles = recommendedTopics.map(t => t.title).join('、');
+            const userTopics = (state.favorites || []).map(f => f.topic);
+            const currentTitlesList = [...new Set([...recommendedTopics.map(t => t.title), ...userTopics])];
+            const currentTitles = currentTitlesList.join('、');
+            
             const prompt = `請推薦4個「完全不同領域」且「適合學習」的新主題。要求：
 1. 領域要多元，例如涵蓋：藝術設計、前沿科學、日常生活技巧、哲學歷史、軟實力、旅遊文化等。
-2. 絕對不要推薦以下已經出現過的主題：${currentTitles}。
+2. 絕對不要推薦以下已經出現過或正在學習的主題：${currentTitles}。
 3. 每個主題包含「title」(2-6個字)和一個對應的「icon」(從 Phosphor Icons 挑選，例如 ph-atom, ph-code, ph-globe, ph-leaf, ph-planet, ph-camera, ph-music-notes 等)。
 4. 請直接回傳 JSON 陣列格式，例如：[{"title": "主題名", "icon": "ph-icon"}]
 5. 不要任何額外解釋文字。`;
@@ -500,7 +503,9 @@ async function refreshRecommendedTopics(isAuto = false) {
             }
         }
         
-        const shuffled = [...topicPools.recommended].sort(() => 0.5 - Math.random());
+        const userTopics = (state.favorites || []).map(f => f.topic);
+        const filteredPool = topicPools.recommended.filter(t => !userTopics.includes(t.title));
+        const shuffled = [...(filteredPool.length >= 4 ? filteredPool : topicPools.recommended)].sort(() => 0.5 - Math.random());
         recommendedTopics.length = 0;
         recommendedTopics.push(...shuffled.slice(0, 4));
         renderTopicGrids();
@@ -1037,8 +1042,11 @@ async function checkDailyRefresh() {
             state.lastRefreshTime = Date.now();
             saveState();
             
+            
             // NO AI CALL HERE - Local shuffle only to preserve quota for chat
-            const shuffled = [...topicPools.recommended].sort(() => 0.5 - Math.random());
+            const userTopics = (state.favorites || []).map(f => f.topic);
+            const filteredPool = topicPools.recommended.filter(t => !userTopics.includes(t.title));
+            const shuffled = [...(filteredPool.length >= 4 ? filteredPool : topicPools.recommended)].sort(() => 0.5 - Math.random());
             recommendedTopics.length = 0;
             recommendedTopics.push(...shuffled.slice(0, 4));
             
